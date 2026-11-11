@@ -1,0 +1,8 @@
+{
+  "name": "volga-demo-gateway",
+  "main": "deploy/worker.mjs",
+  "compatibility_date": "2026-11-10",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "volga.walloura.com", "custom_domain": true }]
+}
