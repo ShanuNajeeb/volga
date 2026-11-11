@@ -10,7 +10,8 @@ services:
     buildCommand: >-
       corepack pnpm install --frozen-lockfile --prod=false &&
       corepack pnpm --filter @dtc/backend run build &&
-      corepack pnpm --filter @dtc/backend exec medusa db:migrate
+      corepack pnpm --filter @dtc/backend exec medusa db:migrate &&
+      corepack pnpm --filter @dtc/backend exec medusa exec ./src/scripts/show-publishable-key.ts
     startCommand: >-
       cd apps/backend/.medusa/server &&
       NODE_ENV=production node ../../node_modules/@medusajs/cli/cli.js start -H 0.0.0.0 -p "$PORT"
