@@ -2,6 +2,7 @@ import type { ExecArgs } from "@medusajs/framework/types"
 import { MedusaModule } from "@medusajs/framework/modules-sdk"
 import {
   ContainerRegistrationKeys,
+  MedusaError,
   Modules,
   RBAC_SUPER_ADMIN_ROLE_ID,
 } from "@medusajs/framework/utils"
@@ -11,13 +12,41 @@ import showPublishableKey from "./show-publishable-key"
 export default async function setupRenderDemo(args: ExecArgs) {
   const { container } = args
   const email = process.env.VOLGA_ADMIN_EMAIL
-  const password = process.env.VOLGA_ADMIN_PASSWORD
-  if (!email || !password) {
-    throw new Error("Set the Render demo admin email and password")
+  if (!email) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "Set the Render demo admin email")
   }
 
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
+  const { data: [user] } = await query.graph({
+    entity: "user",
+    fields: ["id"],
+    filters: { email },
+  })
+
+  if (user) {
+    const { data: identities } = await query.graph({
+      entity: "auth_identity",
+      fields: ["provider_identities.provider", "provider_identities.entity_id"],
+      filters: { app_metadata: { user_id: user.id } },
+    })
+    const hasLogin = identities.some(({ provider_identities }) =>
+      provider_identities?.some(({ provider, entity_id }) =>
+        provider === "emailpass" && entity_id === email,
+      ),
+    )
+    if (hasLogin) {
+      logger.info("Render demo admin is ready")
+      await showPublishableKey(args)
+      return
+    }
+  }
+
+  const password = process.env.VOLGA_ADMIN_PASSWORD
+  if (!password) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "Set the initial Render demo admin password")
+  }
+
   const auth = container.resolve(Modules.AUTH)
   const credentials = { body: { email, password } }
   const existingIdentity = await auth.authenticate("emailpass", credentials)
@@ -26,19 +55,14 @@ export default async function setupRenderDemo(args: ExecArgs) {
     : await auth.register("emailpass", credentials)
 
   if (!identity.success || !identity.authIdentity) {
-    throw new Error("Could not establish the Render demo admin identity")
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "Could not establish the Render demo admin identity")
   }
 
   const { authIdentity } = identity
-  const { data: [user] } = await query.graph({
-    entity: "user",
-    fields: ["id"],
-    filters: { email },
-  })
   const linkedUserId = authIdentity.app_metadata?.user_id
 
   if (linkedUserId && linkedUserId !== user?.id) {
-    throw new Error("The Render demo identity already belongs to another user")
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "The Render demo identity already belongs to another user")
   }
 
   if (!user) {
